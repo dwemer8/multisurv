@@ -99,7 +99,6 @@ class MultiSurv(torch.nn.Module):
 
     def forward(self, x):
         multimodal_features = tuple()
-
         # Run data through modality sub-models (generate feature vectors) ----#
         for modality in x:
             multimodal_features += (self.submodels[modality](x[modality]),)

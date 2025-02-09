@@ -19,8 +19,8 @@ import plotting as plot
 
 
 # Storage location of data and trained model weights
-INPUT_DATA_DIR = '/mnt/dataA/TCGA/processed/'
-TRAINED_MODEL_DIR = '/mnt/dataA/multisurv_models/'
+INPUT_DATA_DIR = '/mnt/data/d.kornilov/TCGA/processed/'
+TRAINED_MODEL_DIR = '/home/d.kornilov/work/multisurv/outputs/models'
 
 
 def elapsed_time(start):

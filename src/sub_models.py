@@ -88,7 +88,7 @@ class FC(nn.Module):
         if dropout:
             layer.append(nn.Dropout())
         layer.append(nn.Linear(in_features, out_features))
-        layer.append(nn.ReLU(inplace=True))
+        layer.append(nn.ReLU())
         if batchnorm:
             layer.append(nn.BatchNorm1d(out_features))
 

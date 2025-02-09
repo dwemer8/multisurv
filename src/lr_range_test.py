@@ -64,7 +64,7 @@ class LRRangeTest:
 
             # Get the loss for this mini-batch of inputs/outputs
             loss, _, _, _ = model_coach._process_data_batch(
-                data, phase='train', retain_graph=True)
+                data, phase='train')
 
             # Compute the smoothed loss
             avg_loss = (beta * avg_loss + (1 - beta) *
@@ -85,9 +85,9 @@ class LRRangeTest:
             self.lrs.append(lr)
 
             # Do the optimizer step
-            self.optimizer.zero_grad()
-            loss.backward()
-            self.optimizer.step()
+            # self.optimizer.zero_grad()
+            # loss.backward() <- cause of error, is already computed in model_coach
+            # self.optimizer.step()
 
             # Update the lr for the next step
             lr *= mult
