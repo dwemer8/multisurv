@@ -14,6 +14,7 @@ from predictor import Predictor
 from sub_models import freeze_layers
 from loss import Loss
 
+import wandb
 
 class _BaseModelWithData:
     """Abstract model with input data."""
@@ -111,8 +112,27 @@ class Model(_BaseModelWithData):
             optimizer=optimizer, criterion=self.loss,
             auxiliary_criterion=self.aux_loss,
             output_intervals=self.output_intervals, device=self.device)
+        
+        wandb.init(
+            name=f"{self.fusion_method}_{'_'.join(self.data_modalities)}_n_intervals_{len(self.output_intervals)}_period_{self.output_intervals[1] - self.output_intervals[0]}",
+            config={
+                "lr": lr,
+                "num_epochs": num_epochs,
+                "info_freq": info_freq,
+                "log_dir": log_dir,
+                "lr_factor": lr_factor,
+                "scheduler_patience": scheduler_patience,
+                "self.fusion_method": self.fusion_method,
+                "output_intervals": self.output_intervals,
+                "modalities": self.data_modalities
+            },
+            entity="dmitriykornilov_team",
+            project="MultiSurv"
+        )
 
         model_coach.train(num_epochs, scheduler, info_freq, log_dir)
+
+        wandb.finish()
 
         self.model = model_coach.model
         self.best_model_weights = model_coach.best_wts

@@ -69,7 +69,7 @@ def get_label_map(data_file, split_group='train'):
 
 def get_dataloaders(data_location, labels_file, modalities,
                     wsi_patch_size=None, n_wsi_patches=None, batch_size=None,
-                    exclude_patients=None, return_patient_id=False):
+                    exclude_patients=None, return_patient_id=False, drop_last=True, num_workers=8):
     """Instantiate PyTorch DataLoaders.
 
     Parameters
@@ -157,13 +157,13 @@ def get_dataloaders(data_location, labels_file, modalities,
 
     dataloaders = {'train': torch.utils.data.DataLoader(
         datasets['train'], batch_size=batch_size,
-        shuffle=True, num_workers=4, drop_last=True),
+        shuffle=True, num_workers=num_workers, drop_last=drop_last),
                    'val': torch.utils.data.DataLoader(
-        datasets['val'], batch_size=batch_size * 2,
-        shuffle=False, num_workers=4, drop_last=True),
+        datasets['val'], batch_size=batch_size,
+        shuffle=False, num_workers=num_workers, drop_last=drop_last),
                    'test': torch.utils.data.DataLoader(
-        datasets['test'], batch_size=batch_size * 2,
-        shuffle=False, num_workers=4, drop_last=True)}
+        datasets['test'], batch_size=batch_size,
+        shuffle=False, num_workers=num_workers, drop_last=drop_last)}
 
     return dataloaders
 
@@ -202,9 +202,9 @@ def compose_run_tag(model, lr, dataloaders, log_dir, suffix=''):
     print(f'Run tag: "{run_tag}"')
 
     # Stop if TensorBoard log directory already exists
-    tb_log_dir = os.path.join(log_dir, run_tag)
-    assert not os.path.isdir(tb_log_dir), ('Tensorboard log directory ' +
-                                           f'already exists:\n"{tb_log_dir}"')
+    # tb_log_dir = os.path.join(log_dir, run_tag)
+    # assert not os.path.isdir(tb_log_dir), ('Tensorboard log directory ' +
+    #                                        f'already exists:\n"{tb_log_dir}"')
     return run_tag
 
 def discretize_time_by_duration_quantiles(t, e, n):

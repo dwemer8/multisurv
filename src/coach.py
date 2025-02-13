@@ -14,6 +14,16 @@ from pycox.evaluation import EvalSurv
 
 import utils
 
+import wandb
+from tqdm import tqdm
+from torch.profiler import profile, ProfilerActivity, schedule
+
+def trace_handler(p, sort_by_keyword="self_cpu_time_total", row_limit=10, is_print=True):
+    if is_print: print(p.key_averages().table(sort_by=sort_by_keyword, row_limit=row_limit))
+    base_path = "outputs/traces"
+    if not os.path.exists(base_path):
+        os.makedirs(base_path)
+    p.export_chrome_trace(f"{base_path}/trace_{p.step_num}.json")
 
 class ModelCoach:
     """Model fitting functionality."""
@@ -77,6 +87,8 @@ class ModelCoach:
         info = {phase + '_loss': epoch_loss,
                 phase + '_concord': epoch_concord}
 
+        wandb.log(info)
+
         for tag, value in info.items():
             logger.add_scalar(tag, value, epoch)
 
@@ -137,88 +149,97 @@ class ModelCoach:
 
             print_header()
 
-        for epoch in range(1, num_epochs + 1):
-            if info_freq is None:
-                print_info = False
-            else:
-                print_info = epoch == 1 or epoch % info_freq == 0
-
-            for phase in ['train', 'val']:
-                if phase == 'train':
-                    self.model.train()
+        with profile(
+            activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
+            record_shapes=True,
+            profile_memory=True,
+            with_flops=True,
+            schedule=schedule(
+                skip_first = 0,
+                wait = 0,
+                warmup = 1,
+                active = 1,
+                repeat = 1
+            ),
+            on_trace_ready=trace_handler
+        ) as prof:
+            for epoch in tqdm(range(1, num_epochs + 1)):
+                if info_freq is None:
+                    print_info = False
                 else:
-                    self.model.eval()
+                    print_info = epoch == 1 or epoch % info_freq == 0
 
-                running_losses = []
-
-                if print_info or log_info:
-                    running_durations = torch.FloatTensor().to(self.device)
-                    running_censors = torch.LongTensor().to(self.device)
-                    running_risks = torch.FloatTensor().to(self.device)
-
-                # Iterate over data
-                for data in self.dataloaders[phase]:
-                    batch_result = self._process_data_batch(data, phase)
-                    loss, risk, time, event = batch_result
-
-                    # Stats
-                    running_losses.append(loss.item())
-                    running_durations = torch.cat((running_durations,
-                                                   time.data.float()))
-                    running_censors = torch.cat((running_censors,
-                                                 event.long().data))
-                    running_risks = torch.cat((running_risks, risk.detach()))
-
-                epoch_loss = torch.mean(torch.tensor(running_losses))
-
-                surv_probs = self._predictions_to_pycox(
-                    running_risks, time_points=None)
-                running_durations = running_durations.cpu().numpy()
-                running_censors = running_censors.cpu().numpy()
-                epoch_concord = EvalSurv(
-                    surv_probs, running_durations, running_censors,
-                    censor_surv='km'
-                ).concordance_td('adj_antolini')
-
-                if print_info:
+                for phase in ['train', 'val']:
                     if phase == 'train':
-                        message = f' {epoch}/{num_epochs}'
-                    space = 10 if phase == 'train' else 27
-                    message += ' ' * (space - len(message))
-                    message += f'{epoch_loss:.4f}' 
-                    space = 19 if phase == 'train' else 36
-                    message += ' ' * (space - len(message))
-                    message += f'{epoch_concord:.3f}' 
+                        self.model.train()
+                    else:
+                        self.model.eval()
+
+                    running_losses = []
+
+                    if print_info or log_info:
+                        running_durations = torch.FloatTensor().to(self.device)
+                        running_censors = torch.LongTensor().to(self.device)
+                        running_risks = torch.FloatTensor().to(self.device)
+
+                    # Iterate over data
+                    for data in self.dataloaders[phase]:
+                        batch_result = self._process_data_batch(data, phase)
+                        loss, risk, time, event = batch_result
+
+                        # Stats
+                        running_losses.append(loss.item())
+                        running_durations = torch.cat((running_durations,
+                                                    time.data.float()))
+                        running_censors = torch.cat((running_censors,
+                                                    event.long().data))
+                        running_risks = torch.cat((running_risks, risk.detach()))
+
+                    epoch_loss = torch.mean(torch.tensor(running_losses))
+
+                    surv_probs = self._predictions_to_pycox(
+                        running_risks, time_points=None)
+                    running_durations = running_durations.cpu().numpy()
+                    running_censors = running_censors.cpu().numpy()
+                    epoch_concord = EvalSurv(
+                        surv_probs, running_durations, running_censors,
+                        censor_surv='km'
+                    ).concordance_td('adj_antolini')
+
+                    if print_info:
+                        if phase == 'train':
+                            message = f' {epoch}/{num_epochs}'
+                        space = 10 if phase == 'train' else 27
+                        message += ' ' * (space - len(message))
+                        message += f'{epoch_loss:.4f}' 
+                        space = 19 if phase == 'train' else 36
+                        message += ' ' * (space - len(message))
+                        message += f'{epoch_concord:.3f}' 
+                        if phase == 'val':
+                            print(message)
+
+                    if log_info:
+                        self._log_info(
+                            phase=phase, logger=logger, epoch=epoch,
+                            epoch_loss=epoch_loss, epoch_concord=epoch_concord)
+
                     if phase == 'val':
-                        print(message)
+                        if scheduler:
+                            scheduler.step(epoch_concord)
 
-                if log_info:
-                    self._log_info(
-                        phase=phase, logger=logger, epoch=epoch,
-                        epoch_loss=epoch_loss, epoch_concord=epoch_concord)
-
-                if phase == 'val':
-                    if scheduler:
-                        scheduler.step(epoch_concord)
-
-                    # Record current performance
-                    k = list(self.current_perf.keys())[0]
-                    self.current_perf[
-                        'epoch' + str(epoch)] = self.current_perf.pop(k)
-                    self.current_perf['epoch' + str(epoch)] = epoch_concord
-                    # Deep copy the model
-                    for k, v in self.best_perf.items():
-                        if epoch_concord >= v:
-                            self.best_perf[
-                                'epoch' + str(epoch)] = self.best_perf.pop(k)
-                            self.best_perf[
-                                'epoch' + str(epoch)] = epoch_concord
-                            self.best_wts[
-                                'epoch' + str(epoch)] = self.best_wts.pop(k)
-                            self.best_wts[
-                                'epoch' + str(epoch)] = copy.deepcopy(
-                                    self.model.state_dict())
-                            break
+                        # Record current performance
+                        k = list(self.current_perf.keys())[0]
+                        self.current_perf['epoch' + str(epoch)] = self.current_perf.pop(k)
+                        self.current_perf['epoch' + str(epoch)] = epoch_concord
+                        # Deep copy the model
+                        for k, v in self.best_perf.items():
+                            if epoch_concord >= v:
+                                self.best_perf['epoch' + str(epoch)] = self.best_perf.pop(k)
+                                self.best_perf['epoch' + str(epoch)] = epoch_concord
+                                self.best_wts['epoch' + str(epoch)] = self.best_wts.pop(k)
+                                self.best_wts['epoch' + str(epoch)] = copy.deepcopy(self.model.state_dict())
+                                break
+            prof.step()
 
     def train(self, num_epochs, scheduler, info_freq, log_dir):
         """Train multimodal PyTorch model."""

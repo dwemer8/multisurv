@@ -9,7 +9,7 @@ import torch
 from sklearn.utils import resample
 from lifelines.utils import concordance_index
 from pycox.evaluation import EvalSurv
-
+from tqdm import tqdm
 
 class _BaseEvaluation:
     """Evaluation functionality common to all model types."""
@@ -288,8 +288,8 @@ class Evaluation(_BaseEvaluation):
         self.boot_c_index_td, self.boot_ibs, self.boot_inbll = [], [], []
         skipped = 0
 
-        for i in range(n):
-            print('\r' + f'{str((i + 1))}/{n}', end='')
+        for i in tqdm(range(n)):
+            # print('\r' + f'{str((i + 1))}/{n}', end='')
             # Get bootstrap sample (same size as dataset)
             boot_ids = resample(self.ev._collect_patient_ids(), replace=True)
             sample_data = {patient: self.patient_predictions[patient]

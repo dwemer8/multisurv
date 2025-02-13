@@ -110,9 +110,13 @@ class ClinicalNet(nn.Module):
 
     Handle continuous features and categorical feature embeddings.
     """
-    def __init__(self, output_vector_size, embedding_dims=[
-        (33, 17), (2, 1), (8, 4), (3, 2), (3, 2), (3, 2), (3, 2), (3, 2),
-        (20, 10)]):
+    def __init__(
+            self, 
+            output_vector_size, 
+            embedding_dims=[
+                # (33, 17), (2, 1), (8, 4), (3, 2), (3, 2), (3, 2), (3, 2), (3, 2), (20, 10), #for training with all types of cancer
+                (2, 1), (2, 1), (7, 4), (3, 2), (3, 2), (3, 2), (3, 2), (3, 2), (1, 1) #for lgg and gbm only tranining
+            ]):
         super(ClinicalNet, self).__init__()
         # Embedding layer
         self.embedding_layers = nn.ModuleList([nn.Embedding(x, y)
