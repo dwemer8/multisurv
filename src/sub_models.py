@@ -115,7 +115,8 @@ class ClinicalNet(nn.Module):
             output_vector_size, 
             embedding_dims=[
                 # (33, 17), (2, 1), (8, 4), (3, 2), (3, 2), (3, 2), (3, 2), (3, 2), (20, 10), #for training with all types of cancer
-                (2, 1), (2, 1), (7, 4), (3, 2), (3, 2), (3, 2), (3, 2), (3, 2), (1, 1) #for lgg and gbm only tranining
+                # (2, 1), (2, 1), (7, 4), (3, 2), (3, 2), (3, 2), (3, 2), (3, 2), (1, 1) #for lgg and gbm only tranining
+                (2, 1), (2, 1), (7, 4), (3, 2), (3, 2), (3, 2), (3, 2), (3, 2) #for mtcp only tranining
             ]):
         super(ClinicalNet, self).__init__()
         # Embedding layer
@@ -147,7 +148,6 @@ class ClinicalNet(nn.Module):
         x = self.embedding_dropout(x)
 
         continuous_x = self.bn_layer(continuous_x)
-
         x = torch.cat([x, continuous_x], 1)
         out = self.output_layer(self.linear(x))
 

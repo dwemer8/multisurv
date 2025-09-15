@@ -39,17 +39,17 @@ import wandb
 # MODELS = utils.TRAINED_MODEL_DIR
 DATA = '/mnt/data/d.kornilov/TCGA/processed_mtcp'
 MODELS = '/home/d.kornilov/work/multisurv/outputs/models_mtcp'
-LABELS_FILE = '/home/d.kornilov/work/multisurv/data/labels_mtcp.tsv'
+LABELS_FILE = '/home/d.kornilov/work/multisurv/data/labels_mtcp_intersection.tsv'
 LOG_DIR = '.training_logs_mtcp'
 CLINICAL_DATASET = 'data/clinical_data_mtcp_preprocessed.tsv'
+RUN_NAME_PREFIX = 'eval_intersection_'
+WEIGHTS_PREFIX = 'clinical_mRNA_lr0.005'
+N_FOLDS = 5
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 # %%
 print(device)
-
-# %% [markdown]
-# # `DataLoader`
 
 # %%
 data_modalities = widgets.SelectMultiple(
@@ -59,28 +59,7 @@ data_modalities = widgets.SelectMultiple(
     description='Input data',
     disabled=False
 )
-# display(data_modalities)
 print(data_modalities)
-
-# %%
-#-----------------------------------------------------------------------------#
-#                             20-CANCER SUBSET                                #
-#                 (to compare to Cheerla and Gevaert 2019)                    #
-#-----------------------------------------------------------------------------#
-
-# cancers = ['BLCA', 'BRCA', 'CESC', 'COAD', 'READ',
-#            'HNSC', 'KICH', 'KIRC', 'KIRP', 'LAML',
-#            'LGG', 'LIHC', 'LUAD', 'LUSC', 'OV',
-#            'PAAD', 'PRAD', 'SKCM', 'STAD', 'THCA', 'UCEC']
-
-# labels = pd.read_csv('data/labels.tsv', sep='\t')
-# print(labels.head(3))
-
-# # List of patients to exclude: patients with cancers that are not in the subset
-# exclude_cancers = list(labels.loc[~labels['project_id'].isin(cancers), 'submitter_id'])
-# len(exclude_cancers)
-
-# %%
 
 picked_lr = 5e-3
 fit_args = {
@@ -94,8 +73,16 @@ fit_args = {
     'scheduler_patience': 10,
 }
 
+weights = []
+for name in os.listdir(MODELS):
+    if name.startswith(WEIGHTS_PREFIX):
+        weights.append(os.path.join(MODELS, name))
+weights = sorted(weights, key=lambda x: int(x.split("_")[5]))
+print(weights)
+assert len(weights) == N_FOLDS, f'Number of weights {len(weights)} is not equal to number of folds {N_FOLDS}'
+
 wandb.init(
-    name=f"{'_'.join(data_modalities.value)}",
+    name=f"{RUN_NAME_PREFIX}{'_'.join(data_modalities.value)}",
     config=fit_args,
     entity="dmitriykornilov_team",
     project="MultiSurv"
@@ -104,7 +91,7 @@ wandb.init(
 all_val_metrics = []
 all_test_metrics = []
 
-for fold in range(5):
+for fold in range(N_FOLDS):
     print(f"Fold {fold}")
 
     dataloaders = utils.get_dataloaders(data_location=DATA,
@@ -138,90 +125,10 @@ for fold in range(5):
     #                   output_intervals=interval_cuts,
                     output_intervals=cuts, 
                     device=device)
-
-    # %%
     print('Output intervals (in years):')
     print(multisurv.output_intervals / 365)
-
-    # %%
-    print(multisurv.model_blocks)
-
-    # %%
-    print('Trainable blocks:')
-    layer = None
-
-    for name, child in multisurv.model.named_children():
-        for name_2, params in child.named_parameters():
-            if name is not layer:
-                print(f'   {name}: {params.requires_grad}')
-            layer = name
-
-    # %%
     print(multisurv.model)
-
-    # %% [markdown]
-    # ## Pick learning rate
-
-    # %%
-    # %%time
-
-    # multisurv.test_lr_range()
-    # print()
-
-    # # %%
-    # multisurv.plot_lr_range(trim=1)
-
-    # %% [markdown]
-    # ## Fit
-
-    # %%
-
-    run_tag = utils.compose_run_tag(model=multisurv, lr=picked_lr,
-                                    dataloaders=dataloaders,
-                                    log_dir=LOG_DIR,
-                                    suffix=f'_fold_{fold}')
-
-    fit_args.update({
-        'log_dir': os.path.join(LOG_DIR, run_tag),
-        "run_tag": run_tag,
-        "fold": fold
-    })
-
-    # wandb.init(
-    #     name=f"{run_tag}_{multisurv.fusion_method}_{'_'.join(multisurv.data_modalities)}_n_intervals_{len(multisurv.output_intervals)}_period_{multisurv.output_intervals[1] - multisurv.output_intervals[0]}",
-    #     config={
-    #         **fit_args,
-    #         "self.fusion_method": multisurv.fusion_method,
-    #         "output_intervals": multisurv.output_intervals,
-    #         "modalities": multisurv.data_modalities
-    #     },
-    #     entity="dmitriykornilov_team",
-    #     project="MultiSurv"
-    # )
-
-    multisurv.fit(**fit_args)
-
-    # %% [markdown]
-    # ### Save model weights
-    # 
-    # If desired.
-
-    # %%
-    print(multisurv.best_model_weights.keys())
-
-    # %%
-    print(multisurv.best_concord_values)
-    best_epoch = sorted(multisurv.best_concord_values.items(), key=lambda kv: kv[1], reverse=True)[0][0]
-    print("Best epoch:", best_epoch)
-
-    # %%
-    print(multisurv.current_concord)
-
-    # %%
-    multisurv.save_weights(saved_epoch=best_epoch, prefix=run_tag, weight_dir=MODELS)
-
-    # %% [markdown]
-    # ## Check validation metrics
+    multisurv.load_weights(weights[fold])
 
     # %%
     dataloaders = utils.get_dataloaders(data_location=DATA,

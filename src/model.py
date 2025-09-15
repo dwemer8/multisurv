@@ -99,7 +99,7 @@ class Model(_BaseModelWithData):
             print(f'       Please run {".test_lr_range"} first.')
 
     def fit(self, lr, num_epochs, info_freq, log_dir, lr_factor=0.1,
-            scheduler_patience=5):
+            scheduler_patience=5, run_tag=None, fold=None):
         self._instantiate_model()
         optimizer = self.optimizer(self.model.parameters(), lr=lr)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
@@ -113,26 +113,26 @@ class Model(_BaseModelWithData):
             auxiliary_criterion=self.aux_loss,
             output_intervals=self.output_intervals, device=self.device)
         
-        wandb.init(
-            name=f"{self.fusion_method}_{'_'.join(self.data_modalities)}_n_intervals_{len(self.output_intervals)}_period_{self.output_intervals[1] - self.output_intervals[0]}",
-            config={
-                "lr": lr,
-                "num_epochs": num_epochs,
-                "info_freq": info_freq,
-                "log_dir": log_dir,
-                "lr_factor": lr_factor,
-                "scheduler_patience": scheduler_patience,
-                "self.fusion_method": self.fusion_method,
-                "output_intervals": self.output_intervals,
-                "modalities": self.data_modalities
-            },
-            entity="dmitriykornilov_team",
-            project="MultiSurv"
-        )
+        # wandb.init(
+        #     name=f"{run_tag}_{self.fusion_method}_{'_'.join(self.data_modalities)}_n_intervals_{len(self.output_intervals)}_period_{self.output_intervals[1] - self.output_intervals[0]}",
+        #     config={
+        #         "lr": lr,
+        #         "num_epochs": num_epochs,
+        #         "info_freq": info_freq,
+        #         "log_dir": log_dir,
+        #         "lr_factor": lr_factor,
+        #         "scheduler_patience": scheduler_patience,
+        #         "self.fusion_method": self.fusion_method,
+        #         "output_intervals": self.output_intervals,
+        #         "modalities": self.data_modalities
+        #     },
+        #     entity="dmitriykornilov_team",
+        #     project="MultiSurv"
+        # )
 
-        model_coach.train(num_epochs, scheduler, info_freq, log_dir)
+        model_coach.train(num_epochs, scheduler, info_freq, log_dir, fold=fold)
 
-        wandb.finish()
+        # wandb.finish()
 
         self.model = model_coach.model
         self.best_model_weights = model_coach.best_wts

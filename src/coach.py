@@ -83,14 +83,14 @@ class ModelCoach:
 
         return loss
 
-    def _log_info(self, phase, logger, epoch, epoch_loss, epoch_concord):
-        info = {phase + '_loss': epoch_loss,
-                phase + '_concord': epoch_concord}
+    def _log_info(self, phase, logger, epoch, epoch_loss, epoch_concord, fold=None):
+        info = {'loss': epoch_loss,
+                'concord': epoch_concord}
 
-        wandb.log(info)
+        wandb.log({f"{phase}.fold_{fold}.{k}": v for k, v in info.items()})
 
         for tag, value in info.items():
-            logger.add_scalar(tag, value, epoch)
+            logger.add_scalar(f"{phase}.fold_{fold}.{tag}", value, epoch)
 
     def _process_data_batch(self, data, phase, retain_graph=None):
         if len(data) == 3:
@@ -132,7 +132,7 @@ class ModelCoach:
 
         return df
 
-    def _run_training_loop(self, num_epochs, scheduler, info_freq, log_dir):
+    def _run_training_loop(self, num_epochs, scheduler, info_freq, log_dir, fold=None):
         logger = SummaryWriter(log_dir)
         log_info = True
 
@@ -197,8 +197,9 @@ class ModelCoach:
 
                     epoch_loss = torch.mean(torch.tensor(running_losses))
 
+                    time_points = [(self.output_intervals[i] + self.output_intervals[i+1])/2 for i in range(len(self.output_intervals)-1)]
                     surv_probs = self._predictions_to_pycox(
-                        running_risks, time_points=None)
+                        running_risks, time_points=time_points)
                     running_durations = running_durations.cpu().numpy()
                     running_censors = running_censors.cpu().numpy()
                     epoch_concord = EvalSurv(
@@ -221,7 +222,8 @@ class ModelCoach:
                     if log_info:
                         self._log_info(
                             phase=phase, logger=logger, epoch=epoch,
-                            epoch_loss=epoch_loss, epoch_concord=epoch_concord)
+                            epoch_loss=epoch_loss, epoch_concord=epoch_concord,
+                            fold=fold)
 
                     if phase == 'val':
                         if scheduler:
@@ -241,13 +243,13 @@ class ModelCoach:
                                 break
             prof.step()
 
-    def train(self, num_epochs, scheduler, info_freq, log_dir):
+    def train(self, num_epochs, scheduler, info_freq, log_dir, fold=None):
         """Train multimodal PyTorch model."""
         start_time = time.time()
 
         # Handle keyboard interrupt
         try:
-            self._run_training_loop(num_epochs, scheduler, info_freq, log_dir)
+            self._run_training_loop(num_epochs, scheduler, info_freq, log_dir, fold=fold)
 
             hrs, mins, secs = utils.elapsed_time(start_time)
             print()

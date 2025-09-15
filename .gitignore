@@ -1,3 +1,7 @@
+data/*.txt
+data/*.tsv
+figures_and_tables/*.pdf
+figures_and_tables/*.png
 wandb/
 outputs/
 .training_logs*

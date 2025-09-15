@@ -17,10 +17,25 @@ from evaluation import Evaluation
 from result_table_writer import ResultTable
 import plotting as plot
 
+from typing import Dict, List, Tuple, Union
 
 # Storage location of data and trained model weights
 INPUT_DATA_DIR = '/mnt/data/d.kornilov/TCGA/processed/'
 TRAINED_MODEL_DIR = '/home/d.kornilov/work/multisurv/outputs/models'
+
+def agg_fold_metrics(lst):
+    """Compute mean, min, max, std from cross validation metrics"""
+    keys = lst[0].keys()
+    res = {}
+    for k in keys:
+        res[k] = compute_stats([dct[k] for dct in lst])
+    return res
+
+
+def compute_stats(lst):
+    """Compute some stats from a list of floats"""
+    arr = np.array(lst)
+    return {"mean": arr.mean(), "std": arr.std(), "min": arr.min(), "max": arr.max()}   
 
 
 def elapsed_time(start):
@@ -42,7 +57,7 @@ def elapsed_time(start):
 
     return int(hrs), int(mins), int(secs)
 
-def get_label_map(data_file, split_group='train'):
+def get_label_map(data_file, split_group='train', fold=None):
     """Make dictionary of patient labels.
 
     Parameters
@@ -58,9 +73,14 @@ def get_label_map(data_file, split_group='train'):
 
     if split_group is not None:
         groups = list(df['group'].unique())
-        assert split_group in groups, f'Accepted "split_group"s are: {groups}'
+        assert split_group in groups or split_group=='val', f'Accepted "split_group"s are: {groups}'
 
-        df = df.loc[df['group'] == split_group]
+        if fold is not None and split_group == 'train':
+            df = df.loc[(df['group'] == 'train') & (df['splits'] != fold)]
+        elif fold is not None and split_group == 'val':
+            df = df.loc[(df['group'] == 'train') & (df['splits'] == fold)]
+        else:
+            df = df.loc[df['group'] == split_group]
 
     keys = list(df['submitter_id'])
     values = zip(list(df['time']), list(df['event']))
@@ -69,7 +89,9 @@ def get_label_map(data_file, split_group='train'):
 
 def get_dataloaders(data_location, labels_file, modalities,
                     wsi_patch_size=None, n_wsi_patches=None, batch_size=None,
-                    exclude_patients=None, return_patient_id=False, drop_last=True, num_workers=8):
+                    exclude_patients=None, return_patient_id=False, drop_last=True, 
+                    num_workers=8, fold=None, clinical_categorical_num=9,
+                    clinical_dataset_file:str=None):
     """Instantiate PyTorch DataLoaders.
 
     Parameters
@@ -79,7 +101,7 @@ def get_dataloaders(data_location, labels_file, modalities,
     Dict of Pytorch Dataloaders.
     """
     data_dirs = {
-        'clinical': os.path.join(data_location, 'Clinical'),
+        'clinical': os.path.join(data_location, 'Clinical') if not clinical_dataset_file else clinical_dataset_file,
         'wsi': os.path.join(data_location, 'WSI'),
         'mRNA': os.path.join(data_location, 'RNA-seq'),
         'miRNA': os.path.join(data_location, 'miRNA-seq'),
@@ -94,8 +116,8 @@ def get_dataloaders(data_location, labels_file, modalities,
         else:
             batch_size = 2**7
 
-    patient_labels = {'train': get_label_map(labels_file, 'train'),
-                      'val': get_label_map(labels_file, 'val'),
+    patient_labels = {'train': get_label_map(labels_file, 'train', fold=fold),
+                      'val': get_label_map(labels_file, 'val', fold=fold),
                       'test': get_label_map(labels_file, 'test')}
 
     if 'wsi' in data_dirs.keys():
@@ -134,7 +156,8 @@ def get_dataloaders(data_location, labels_file, modalities,
         patch_size=wsi_patch_size,
         transform=transforms[x],
         exclude_patients=exclude_patients,
-        return_patient_id=return_patient_id)
+        return_patient_id=return_patient_id,
+        clinical_categorical_num=clinical_categorical_num)
                 for x in ['train', 'val', 'test']}
 
     print('Data modalities:')
@@ -167,7 +190,7 @@ def get_dataloaders(data_location, labels_file, modalities,
 
     return dataloaders
 
-def compose_run_tag(model, lr, dataloaders, log_dir, suffix=''):
+def compose_run_tag(model, lr, dataloaders, log_dir, suffix='', prefix=''):
     """Compose run tag to use as file name prefix.
 
     Used for Tensorboard log file and model weights.
@@ -199,6 +222,7 @@ def compose_run_tag(model, lr, dataloaders, log_dir, suffix=''):
             run_tag += f'_{model.fusion_method}Aggr'
 
     run_tag += suffix
+    run_tag = prefix + run_tag
     print(f'Run tag: "{run_tag}"')
 
     # Stop if TensorBoard log directory already exists

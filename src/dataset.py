@@ -10,6 +10,8 @@ import torch
 from torch.utils.data import Dataset
 from skimage import io
 
+from functools import partial
+import pandas as pd
 
 class _BaseDataset(Dataset):
     def __init__(self,
@@ -49,12 +51,14 @@ class _BaseDataset(Dataset):
         return len(self.patient_ids)
 
     def _get_patient_ids(self, path_to_data):
-        files = os.listdir(path_to_data)
-        file_ext = os.path.splitext(files[0])[1]
-
-        pids = set([os.path.splitext(file)[0] for file in files])
-
-        return pids
+        if os.path.isdir(path_to_data):
+            files = os.listdir(path_to_data)
+            pids = set([os.path.splitext(file)[0] for file in files])
+            return pids
+        elif os.path.isfile(path_to_data):
+            return set(pd.read_csv(path_to_data, sep='\t')['submitter_id'].values)
+        else:
+            raise ValueError(f"{path_to_data} neither dir nor file")
 
     def _patients_missing_all_data(self):
         missing_all_data = []
@@ -91,7 +95,7 @@ class MultimodalDataset(_BaseDataset):
     label_map: dict
         Patient labels as dictionary (patient id: (time, is_censored)).
     data_dirs: dict
-        Data directories in the format {'clinical': 'path/to/dir',
+        Data directories in the format {'clinical': 'path/to/dir' or 'path/to/table.tsv',
                                         'wsi': 'path/to/dir',
                                         'mRNA': 'path/to/dir',
                                         'miRNA': 'path/to/dir',
@@ -119,10 +123,10 @@ class MultimodalDataset(_BaseDataset):
                             'mRNA': None, 'miRNA': None,
                             },
                  n_patches=None, patch_size=None, transform=None, dropout=0,
-                 exclude_patients=None, return_patient_id=False):
+                 exclude_patients=None, return_patient_id=False, clinical_categorical_num=9):
         super().__init__(label_map, data_dirs, exclude_patients)
         self.modality_loaders = {
-            'clinical': self._get_clinical,
+            'clinical': partial(self._get_clinical, categorical_num=clinical_categorical_num),
             'wsi': self._get_patches,
             'mRNA': self._get_data,
             'miRNA': self._get_data,
@@ -152,6 +156,9 @@ class MultimodalDataset(_BaseDataset):
 
         self.return_patient_id = return_patient_id
 
+        if os.path.isfile(data_dirs['clinical']):
+            self.clinical_data = pd.read_csv(data_dirs['clinical'], sep="\t").set_index('submitter_id', drop=True).drop(['time', 'event', 'group', 'splits'], axis='columns')
+
     def _read_patient_file(self, path):
         with open(path, 'r') as f:
             f = csv.reader(f, delimiter='\t')
@@ -162,16 +169,25 @@ class MultimodalDataset(_BaseDataset):
 
         return values
 
-    def _get_clinical(self, data_dir, patient_id):
-        patient_files = {os.path.splitext(f)[0]: f
-                         for f in os.listdir(data_dir)}
+    def _get_clinical(self, data_dir, patient_id, categorical_num=9):
+        if os.path.isdir(data_dir):
+            patient_files = {os.path.splitext(f)[0]: f
+                            for f in os.listdir(data_dir)}
 
-        data_file = os.path.join(data_dir, patient_files[patient_id])
-        data = self._read_patient_file(data_file)
+            data_file = os.path.join(data_dir, patient_files[patient_id])
+            data = self._read_patient_file(data_file)
+        
+        elif os.path.isfile(data_dir):
+            data = self.clinical_data.loc[patient_id].values
+
         categorical = torch.tensor(
-            [int(float(value)) for value in data[:9]], dtype=torch.int)
+            [int(float(value)) for value in data[:categorical_num]], 
+            dtype=torch.int
+        )
         continuous = torch.tensor(
-            [float(value) for value in data[9:]], dtype=torch.float)
+            [float(value) for value in data[categorical_num:]], 
+            dtype=torch.float
+        )
 
         return categorical, continuous
 
@@ -248,6 +264,7 @@ class MultimodalDataset(_BaseDataset):
             if data_source is not None:
                 data[modality] = self.modality_loaders[modality](
                     data_source, patient_id)
+
                 if isinstance(data[modality], (list, tuple)):  # Clinical data
                     data[modality] = tuple(x.float()
                                            for x in data[modality])

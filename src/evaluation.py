@@ -244,6 +244,7 @@ class Evaluation(_BaseEvaluation):
         return c_index_td, ibs, inbll
 
     def compute_metrics(self, time_points=None):
+
         """Calculate evaluation metrics."""
         if self.patient_predictions is None:
             # Get all patient labels and predictions
@@ -253,6 +254,8 @@ class Evaluation(_BaseEvaluation):
             self.c_index = self._compute_c_index(self.patient_predictions)
 
         if self.c_index_td is None:
+            if time_points is None:
+                time_points = [(self.model.output_intervals[i] + self.model.output_intervals[i+1])/2 for i in range(len(self.model.output_intervals)-1)]
             td_metrics = self._compute_pycox_metrics(self.patient_predictions,
                                                      time_points)
             self.c_index_td, self.ibs, self.inbll = td_metrics

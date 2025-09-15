@@ -14,6 +14,7 @@ import click
 import requests
 import json
 import pandas as pd
+import numpy as np
 
 from tqdm import tqdm
 
@@ -24,57 +25,68 @@ from tqdm import tqdm
 @click.option('-s', '--chunk_size', default=10000, type=int,
               help='Chunk size (number of lines, i.e. genes) to process at a' +
               ' time. Default: 10000')
-@click.option('-o', '--output_file', default='/mnt/data/m.zubrikhina/TCGA/GBMLGG/raw_RNA_variance.tsv', type=click.Path(),
+@click.option('-o', '--output_file', default='/mnt/data/m.zubrikhina/TCGA/GBMLGG/raw_RNA_variance_mtcp_split.tsv', type=click.Path(),
               help='Path to output file. Default: None')
 @click.option('-t', '--n_samples', default=None, type=int,
               help='Number of samples to run (allows running a subset for' +
               ' testing). Default: None')
-@click.option('-i', '--labels', default='/home/d.kornilov/work/multisurv/data/labels_gbm_lgg.tsv',
+@click.option('-l', '--labels', default='/home/d.kornilov/work/multisurv/data/labels_mtcp.tsv',
               type=click.Path(exists=True),
               help='Labels .tsv')
-@click.option('-i', '--mrna_files_path', default='/home/d.kornilov/work/multisurv/data/mRNA_files.csv',
+@click.option('-m', '--mrna_files_path', default=None,
               type=click.Path(exists=True),
               help='mRNA_files_path .csv')
+@click.option('-f', '--files_mapping', default='../mtcp/src/data/dataset.csv', type=str,
+              help='patient-file mapping')
 
 @click.version_option(version='0.0.1', prog_name='Compute gene variance')
-def main(input_file_dir, chunk_size, output_file, n_samples, labels, mrna_files_path):
+def main(input_file_dir, chunk_size, output_file, n_samples, labels, mrna_files_path, files_mapping):
     """Run variance calculation pipeline."""
     start = time.time()
     print_header()
 
     print('Downloading metadata from GDC database...')
 
-    
-    if os.path.exists(mrna_files_path):
-        print(f"mRNA_files was loaded from {mrna_files_path}")
-        mRNA_files = pd.read_csv(mrna_files_path)
+    if files_mapping:
+        mtcp_mapping = pd.read_csv(files_mapping)
+        file_map = {
+            submitter_id: os.path.join(input_file_dir, *file.split(os.sep)[-2:]).replace(".csv", ".tsv") 
+            for submitter_id, file 
+            in zip(mtcp_mapping['submitter_id'].values, mtcp_mapping['RNA'].values) 
+            if file is not np.NaN
+        }
+
     else:
-        print(f"mRNA_files was requested")
-        mRNA_files = request_file_info()
+        if os.path.exists(mrna_files_path):
+            print(f"mRNA_files was loaded from {mrna_files_path}")
+            mRNA_files = pd.read_csv(mrna_files_path)
+        else:
+            print(f"mRNA_files was requested")
+            mRNA_files = request_file_info()
 
-    mRNA_files = mRNA_files[
-        mRNA_files['cases.0.project.project_id'].str.startswith('TCGA')]
-    # mRNA_files = mRNA_files[
-    #     mRNA_files['file_name'].str.endswith('FPKM-UQ.txt.gz')]
-    mRNA_files = mRNA_files[
-        mRNA_files['file_name'].str.endswith('rna_seq.augmented_star_gene_counts.tsv')]
-    # mRNA_files = mRNA_files[
-    #     mRNA_files['cases.0.samples.0.sample_type'] == 'Primary Tumor']
+        mRNA_files = mRNA_files[
+            mRNA_files['cases.0.project.project_id'].str.startswith('TCGA')]
+        # mRNA_files = mRNA_files[
+        #     mRNA_files['file_name'].str.endswith('FPKM-UQ.txt.gz')]
+        mRNA_files = mRNA_files[
+            mRNA_files['file_name'].str.endswith('rna_seq.augmented_star_gene_counts.tsv')]
+        # mRNA_files = mRNA_files[
+        #     mRNA_files['cases.0.samples.0.sample_type'] == 'Primary Tumor']
 
-    # When there is more than one file for a single patient just keep the first 
-    # (this is assuming they are just replicates and all similar)
-    mRNA_files = mRNA_files[~mRNA_files.duplicated(
-        subset=['cases.0.submitter_id'], keep='first')]
+        # When there is more than one file for a single patient just keep the first 
+        # (this is assuming they are just replicates and all similar)
+        mRNA_files = mRNA_files[~mRNA_files.duplicated(
+            subset=['cases.0.submitter_id'], keep='first')]
 
-    file_map = make_patient_file_map(
-        mRNA_files, base_dir=input_file_dir)
-    
-    labels = pd.read_csv(labels, sep='\t')
-    file_map = {k: file_map[k] for k in file_map if k in list(labels['submitter_id'])}
-    print(f"Only {len(file_map)} files with labels are left")
-    
-    file_map = leave_only_existing(file_map)
-    print(f"Only existing {len(file_map)} files are left")
+        file_map = make_patient_file_map(
+            mRNA_files, base_dir=input_file_dir)
+        
+        labels = pd.read_csv(labels, sep='\t')
+        file_map = {k: file_map[k] for k in file_map if k in list(labels['submitter_id'])}
+        print(f"Only {len(file_map)} files with labels are left")
+        
+        file_map = leave_only_existing(file_map)
+        print(f"Only existing {len(file_map)} files are left")
 
     # Subset
     if n_samples is not None:
