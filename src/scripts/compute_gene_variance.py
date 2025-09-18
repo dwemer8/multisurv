@@ -19,24 +19,25 @@ import numpy as np
 from tqdm import tqdm
 
 @click.command()
-@click.option('-i', '--input_file_dir', default='/mnt/data/m.zubrikhina/TCGA/GBMLGG/raw_RNA',
+@click.option('-i', '--input_file_dir', default='/mnt/data/d.kornilov/TCGA/raw/RNA-seq_STAR', #/mnt/data/m.zubrikhina/TCGA/GBMLGG/raw_RNA',
               type=click.Path(exists=True),
               help='Directory containing input files.')
 @click.option('-s', '--chunk_size', default=10000, type=int,
               help='Chunk size (number of lines, i.e. genes) to process at a' +
               ' time. Default: 10000')
-@click.option('-o', '--output_file', default='/mnt/data/m.zubrikhina/TCGA/GBMLGG/raw_RNA_variance_mtcp_split.tsv', type=click.Path(),
-              help='Path to output file. Default: None')
+@click.option('-o', '--output_file', default= '/mnt/data/d.kornilov/TCGA/raw/RNA-seq_STAR_variance_mtcp_intersection_all_split.tsv', #'/mnt/data/m.zubrikhina/TCGA/GBMLGG/raw_RNA_variance_mtcp_split.tsv', 
+              type=click.Path(), help='Path to output file. Default: None')
 @click.option('-t', '--n_samples', default=None, type=int,
               help='Number of samples to run (allows running a subset for' +
               ' testing). Default: None')
-@click.option('-l', '--labels', default='/home/d.kornilov/work/multisurv/data/labels_mtcp.tsv',
+@click.option('-l', '--labels', default= '/home/d.kornilov/work/multisurv/data/labels_mtcp_intersection_all_GBM,LGG.tsv', #'/home/d.kornilov/work/multisurv/data/labels_mtcp.tsv',
               type=click.Path(exists=True),
               help='Labels .tsv')
 @click.option('-m', '--mrna_files_path', default=None,
               type=click.Path(exists=True),
               help='mRNA_files_path .csv')
-@click.option('-f', '--files_mapping', default='../mtcp/src/data/dataset.csv', type=str,
+@click.option('-f', '--files_mapping', default= '/home/d.kornilov/work/multisurv/data/dataset_inetrsection_all.csv', #'../mtcp/src/data/dataset.csv', 
+              type=str,
               help='patient-file mapping')
 
 @click.version_option(version='0.0.1', prog_name='Compute gene variance')
@@ -44,8 +45,6 @@ def main(input_file_dir, chunk_size, output_file, n_samples, labels, mrna_files_
     """Run variance calculation pipeline."""
     start = time.time()
     print_header()
-
-    print('Downloading metadata from GDC database...')
 
     if files_mapping:
         mtcp_mapping = pd.read_csv(files_mapping)
@@ -62,6 +61,7 @@ def main(input_file_dir, chunk_size, output_file, n_samples, labels, mrna_files_
             mRNA_files = pd.read_csv(mrna_files_path)
         else:
             print(f"mRNA_files was requested")
+            print('Downloading metadata from GDC database...')
             mRNA_files = request_file_info()
 
         mRNA_files = mRNA_files[

@@ -1,3 +1,6 @@
+figures_and_tables/*.csv
+data/*.csv
+notebooks/*
 data/*.txt
 data/*.tsv
 figures_and_tables/*.pdf

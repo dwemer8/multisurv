@@ -87,7 +87,7 @@ class ModelCoach:
         info = {'loss': epoch_loss,
                 'concord': epoch_concord}
 
-        wandb.log({f"{phase}.fold_{fold}.{k}": v for k, v in info.items()})
+        # wandb.log({f"{phase}.fold_{fold}.{k}": v for k, v in info.items()})
 
         for tag, value in info.items():
             logger.add_scalar(f"{phase}.fold_{fold}.{tag}", value, epoch)

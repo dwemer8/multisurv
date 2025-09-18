@@ -113,11 +113,13 @@ class ClinicalNet(nn.Module):
     def __init__(
             self, 
             output_vector_size, 
-            embedding_dims=[
+            embedding_dims=None,
+            # [
                 # (33, 17), (2, 1), (8, 4), (3, 2), (3, 2), (3, 2), (3, 2), (3, 2), (20, 10), #for training with all types of cancer
                 # (2, 1), (2, 1), (7, 4), (3, 2), (3, 2), (3, 2), (3, 2), (3, 2), (1, 1) #for lgg and gbm only tranining
-                (2, 1), (2, 1), (7, 4), (3, 2), (3, 2), (3, 2), (3, 2), (3, 2) #for mtcp only tranining
-            ]):
+                # (2, 1), (2, 1), (7, 4), (3, 2), (3, 2), (3, 2), (3, 2), (3, 2) #for mtcp only tranining
+            # ]
+    ):
         super(ClinicalNet, self).__init__()
         # Embedding layer
         self.embedding_layers = nn.ModuleList([nn.Embedding(x, y)
@@ -142,11 +144,22 @@ class ClinicalNet(nn.Module):
         categorical_x, continuous_x = x
         categorical_x = categorical_x.to(torch.int64)
 
-        x = [emb_layer(categorical_x[:, i])
-             for i, emb_layer in enumerate(self.embedding_layers)]
+        assert categorical_x.shape[1] == len(self.embedding_layers), f"categorical_x.shape[1] ({categorical_x.shape[1]}) must be equal to len(self.embedding_layers) ({len(self.embedding_layers)})"
+
+        try:
+            x = [emb_layer(categorical_x[:, i])
+                for i, emb_layer in enumerate(self.embedding_layers)]
+        except IndexError as e:
+            print(self.embedding_layers)
+            print(categorical_x.shape)
+            print(categorical_x.cpu().numpy())
+            print([categorical_x[:, i].cpu().numpy().max() for i in range(categorical_x.shape[1])])
+            print(e)
+            raise e
         x = torch.cat(x, 1)
         x = self.embedding_dropout(x)
 
+        assert self.bn_layer.num_features == continuous_x.shape[1], f"self.num_features ({self.num_features}) must be equal to continuous_x.shape[1] ({continuous_x.shape[1]})"
         continuous_x = self.bn_layer(continuous_x)
         x = torch.cat([x, continuous_x], 1)
         out = self.output_layer(self.linear(x))

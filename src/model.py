@@ -20,7 +20,8 @@ class _BaseModelWithData:
     """Abstract model with input data."""
     def __init__(self, dataloaders, fusion_method=None,
                  output_intervals=None, unimodal_state_files=None,
-                 freeze_up_to=None, device=None):
+                 freeze_up_to=None, device=None, clinical_embedding_dims=None):
+        self.clinical_embedding_dims = clinical_embedding_dims
         self.fusion_method = fusion_method
         self.dataloaders = dataloaders
         self.unimodal_state_files = unimodal_state_files
@@ -41,7 +42,8 @@ class _BaseModelWithData:
             data_modalities=self.data_modalities,
             fusion_method=self.fusion_method,
             n_output_intervals=len(self.output_intervals) - 1,
-            device=self.device)
+            device=self.device,
+            clinical_embedding_dims=self.clinical_embedding_dims)
 
         if self.unimodal_state_files is not None:
             self.pretrained_weights = self._get_pretrained_unimodal_weights()
@@ -73,9 +75,9 @@ class Model(_BaseModelWithData):
     def __init__(self, dataloaders, fusion_method='max',
                  output_intervals=torch.arange(0., 365 * 31, 365),
                  auxiliary_criterion=None, unimodal_state_files=None,
-                 freeze_up_to=None, device=None):
+                 freeze_up_to=None, device=None, clinical_embedding_dims=None):
         super().__init__(dataloaders, fusion_method, output_intervals,
-                         unimodal_state_files, freeze_up_to, device)
+                         unimodal_state_files, freeze_up_to, device, clinical_embedding_dims=clinical_embedding_dims)
         self.optimizer = Adam
         self.loss = Loss()
         self.aux_loss = auxiliary_criterion
@@ -159,6 +161,8 @@ class Model(_BaseModelWithData):
                 f'concord{self.best_concord_values[saved_epoch]:.2f}.pth')
             self.model.load_state_dict(self.best_model_weights[saved_epoch])
 
+        if not os.path.exists(os.path.dirname(file_name)):
+            os.makedirs(os.path.dirname(file_name))
         torch.save(self.model.state_dict(), file_name)
         print('   ', file_name)
 

@@ -19,10 +19,6 @@ import plotting as plot
 
 from typing import Dict, List, Tuple, Union
 
-# Storage location of data and trained model weights
-INPUT_DATA_DIR = '/mnt/data/d.kornilov/TCGA/processed/'
-TRAINED_MODEL_DIR = '/home/d.kornilov/work/multisurv/outputs/models'
-
 def agg_fold_metrics(lst):
     """Compute mean, min, max, std from cross validation metrics"""
     keys = lst[0].keys()
