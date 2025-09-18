@@ -44,6 +44,7 @@ MODELS = '/home/d.kornilov/work/multisurv/outputs/models_mtcp_intersection_all_G
 LABELS_FILE = '/home/d.kornilov/work/multisurv/data/labels_mtcp_intersection_all_GBM,LGG.tsv' #'/home/d.kornilov/work/multisurv/data/labels_mtcp.tsv'
 LOG_DIR = '.training_logs_mtcp_intersection_all_GBM,LGG'
 CLINICAL_DATASET = '/home/d.kornilov/work/multisurv/data/clinical_data_mtcp_intersection_all_preprocessed_GBM,LGG.tsv' #data/clinical_data_mtcp_preprocessed.tsv'
+NUM_OF_CATEGORICAL_CLINICAL_FEATURES = 9 #VERY IMPORTANT!!!
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 # %%
@@ -125,7 +126,7 @@ for fold in range(5):
                                         num_workers=8,
                                         drop_last=False,
                                         fold=fold,
-                                        clinical_categorical_num=9, #VERY IMPORTANT!!!
+                                        clinical_categorical_num=NUM_OF_CATEGORICAL_CLINICAL_FEATURES, #VERY IMPORTANT!!!
                                         clinical_dataset_file=CLINICAL_DATASET
                                     )
 
@@ -241,7 +242,7 @@ for fold in range(5):
     #                                     exclude_patients=exclude_cancers,
                                         return_patient_id=True,
                                         fold=fold,
-                                        clinical_categorical_num=8,
+                                        clinical_categorical_num=NUM_OF_CATEGORICAL_CLINICAL_FEATURES, #VERY IMPORTANT!!!
                                         clinical_dataset_file=CLINICAL_DATASET
                                     )
 
