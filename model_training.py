@@ -16,6 +16,7 @@ import os
 
 import ipywidgets as widgets
 import pandas as pd
+import numpy as np
 import torch
 
 if torch.cuda.is_available():
@@ -39,12 +40,14 @@ from torch.utils.tensorboard import SummaryWriter
 # %%
 # DATA = utils.INPUT_DATA_DIR
 # MODELS = utils.TRAINED_MODEL_DIR
-DATA = '/mnt/data/d.kornilov/TCGA/processed_mtcp_intersection_all/GBM_LGG' #'/mnt/data/d.kornilov/TCGA/processed_mtcp'
-MODELS = '/home/d.kornilov/work/multisurv/outputs/models_mtcp_intersection_all_GBM,LGG'
-LABELS_FILE = '/home/d.kornilov/work/multisurv/data/labels_mtcp_intersection_all_GBM,LGG.tsv' #'/home/d.kornilov/work/multisurv/data/labels_mtcp.tsv'
-LOG_DIR = '.training_logs_mtcp_intersection_all_GBM,LGG'
-CLINICAL_DATASET = '/home/d.kornilov/work/multisurv/data/clinical_data_mtcp_intersection_all_preprocessed_GBM,LGG.tsv' #data/clinical_data_mtcp_preprocessed.tsv'
+DATA = '/mnt/data/d.kornilov/TCGA/processed_mtcp_intersection_all/UCEC' #'/mnt/data/d.kornilov/TCGA/processed_mtcp'
+MODELS = '/home/d.kornilov/work/multisurv/outputs/models_mtcp_intersection_all_UCEC'
+LABELS_FILE = '/home/d.kornilov/work/multisurv/data/labels_mtcp_intersection_all_UCEC.tsv' #'/home/d.kornilov/work/multisurv/data/labels_mtcp.tsv'
+LOG_DIR = '.training_logs_mtcp_intersection_all_UCEC'
+CLINICAL_DATASET = '/home/d.kornilov/work/multisurv/data/clinical_data_mtcp_intersection_all_preprocessed_UCEC.tsv' #data/clinical_data_mtcp_preprocessed.tsv'
 NUM_OF_CATEGORICAL_CLINICAL_FEATURES = 9 #VERY IMPORTANT!!!
+N_FOLDS = 1 #5
+NUM_EPOCHS = 2#75
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 # %%
@@ -87,7 +90,7 @@ print(data_modalities)
 picked_lr = 5e-3
 fit_args = {
     'lr': picked_lr,
-    'num_epochs': 75,
+    'num_epochs': NUM_EPOCHS,
     'info_freq': 1,
 #     'info_freq': None,
 #     'lr_factor': 0.25,
@@ -111,7 +114,7 @@ writer = SummaryWriter(log_dir = os.path.join(
     "_".join(data_modalities.value) + f"_lr{picked_lr}" + "_summary"
 ))
 
-for fold in range(5):
+for fold in range(N_FOLDS):
     print(f"Fold {fold}")
 
     dataloaders = utils.get_dataloaders(data_location=DATA,
@@ -146,7 +149,8 @@ for fold in range(5):
                     output_intervals=cuts, 
                     device=device,
                     clinical_embedding_dims = [
-                        (2, 1), (2, 1), (6, 3), (2, 1), (3, 2), (3, 2), (3, 2), (3, 2), (1, 1) #gbm, lgg VERY IMPORTANT!!!
+                        # (2, 1), (2, 1), (6, 3), (2, 1), (3, 2), (3, 2), (3, 2), (3, 2), (1, 1) #gbm, lgg VERY IMPORTANT!!!
+                        (1, 1), (1, 1), (8, 4), (2, 1), (2, 1), (2, 1), (3, 2), (3, 2), (1, 1) #ucec
                     ])
 
     # %%
@@ -268,6 +272,8 @@ for fold in range(5):
 
         # wandb.summary[f"{phase}.fold_{fold}"] = metrics
         for metric, value in metrics.items():
+            if isinstance(value, list):
+                value = np.mean(value)
             writer.add_scalar(f"{phase}/fold_{fold}/{metric}", value, 0)
 
     # %%

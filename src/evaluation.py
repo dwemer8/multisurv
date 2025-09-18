@@ -353,7 +353,7 @@ class Evaluation(_BaseEvaluation):
         assert method in bootstrap_methods, + \
                 '"method" must be one of {bootstrap_methods}.'
 
-        c_index = self.c_index[0]
+        c_index = np.mean(self.c_index[0])
         c_index = round(c_index , 3)
         ctd = round(self.c_index_td, 3)
         ibs = round(self.ibs, 3)
